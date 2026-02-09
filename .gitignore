@@ -1,0 +1,5 @@
+.venv/
+pgns_small/
+pgns/
+stockfish-windows-x86-64-avx2/
+__pycache__/

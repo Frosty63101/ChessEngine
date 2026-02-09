@@ -1,0 +1,38 @@
+{
+  "weights": [
+    -0.5266489971643843,
+    0.6379007258267455,
+    2.3485086966299398,
+    2.752170583535486,
+    3.451255819444385,
+    4.40663766831255,
+    0.3773720758935078,
+    0.20483161527382027,
+    -0.24585723713426444,
+    -0.05352762389059662,
+    -0.008267300859178976,
+    0.45383616351062966,
+    1.3506009646867698,
+    0.24927978974841328,
+    0.0716901717229695,
+    0.5610846008240531
+  ],
+  "featureNames": [
+    "bias",
+    "pawnDiff",
+    "knightDiff",
+    "bishopDiff",
+    "rookDiff",
+    "queenDiff",
+    "passedPawnDiff",
+    "nonIsolatedPawnDiff",
+    "nonDoubledPawnDiff",
+    "bishopPairDiff",
+    "pstDiff",
+    "mobilitySigned",
+    "centerAttackDiff",
+    "kingTropismDiff",
+    "kingAttackersDiff",
+    "tempo"
+  ]
+}
