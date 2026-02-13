@@ -61,7 +61,8 @@ class ChessGuiApp:
         self.stockfishPath = stockfishPath
         self.evalThreadRunning = False
         self.model = initialModel if initialModel is not None else self._defaultModel()
-        self.engine = AlphaBetaEngine(self.model)
+        self.engine = AlphaBetaEngine(
+            self.model, openingDbPath=r"D:\ChessEngine\opening_book.sqlite")
         self.board = chess.Board()
         self.selectedSquare = None
         self.autoPlayVar = tk.BooleanVar(value=False)
@@ -376,21 +377,48 @@ class ChessGuiApp:
         """Kick off a move for the current side to play."""
         if self.board.is_game_over():
             return
+        print("engineMoveNow: mode=", self.mode, "turn=",
+              "White" if self.board.turn == chess.WHITE else "Black")
+        # Special handling for model-vs-Stockfish mode
         if self.mode == "modelVsStockfish":
             if self._isStockfishTurn():
                 self._stockfishMoveNow()
             else:
                 self._modelMoveNow()
             return
+
         depth = int(self.searchDepthVar.get())
         thinkMs = int(self.thinkTimeVar.get())
+
+        # Snapshot the exact position we are thinking on
+        fenSnapshot = self.board.fen()
+
         self.setStatus(f"thinking (depth<= {depth}, {thinkMs}ms)...")
 
         def worker():
-            result = self.engine.searchIterativeDeepening(
-                self.board, maxDepth=depth, timeLimitMs=thinkMs)
-            self.root.after(0, lambda: self._applyEngineResult(
-                result.bestMove, result.nodes, result.bestScore, result.depth))
+            try:
+                boardCopy = chess.Board(fenSnapshot)  # rebuild from snapshot
+                result = self.engine.searchIterativeDeepening(
+                    boardCopy, maxDepth=depth, timeLimitMs=thinkMs
+                )
+
+                def apply():
+                    # If the board changed while we were thinking, ignore the stale result.
+                    if self.board.fen() != fenSnapshot:
+                        self.setStatus(
+                            "ignored engine result (position changed while thinking)")
+                        return
+                    self._applyEngineResult(
+                        result.bestMove, result.nodes, result.bestScore, result.depth
+                    )
+
+                self.root.after(0, apply)
+
+            except Exception as exc:
+                # If anything goes wrong, show it in the UI instead of failing silently.
+                self.root.after(0, lambda: self.setStatus(
+                    f"engine move failed: {exc}"))
+
         threading.Thread(target=worker, daemon=True).start()
 
     def _applyEngineResult(self, move, nodes: int, score: float, depth: int):
@@ -398,13 +426,25 @@ class ChessGuiApp:
         if move is None:
             self.setStatus("no move found")
             return
-        san = self.board.san(move)
-        self.board.push(move)
+
+        try:
+            if move not in self.board.legal_moves:
+                self.setStatus(f"engine returned illegal move: {move.uci()}")
+                return
+
+            san = self.board.san(move)
+            self.board.push(move)
+
+        except Exception as exc:
+            self.setStatus(f"failed applying engine move: {exc}")
+            return
+
         self._appendMoveSan(san)
         self.drawBoard()
         self.updateEvalBarsAsync()
         self.setStatus(
-            f"played {san} | nodes={nodes} | eval≈{score:.2f} pawns | depth={depth}")
+            f"played {san} | nodes={nodes} | eval≈{score:.2f} pawns | depth={depth}"
+        )
         if self.board.is_game_over():
             messagebox.showinfo("Game Over", f"Result: {self.board.result()}")
 
@@ -646,13 +686,17 @@ class ChessGuiApp:
         thinkMs = int(self.thinkTimeVar.get())
 
         def worker():
+            boardCopy = self.board.copy(stack=False)
             result = self.engine.searchIterativeDeepening(
-                self.board, maxDepth=depth, timeLimitMs=thinkMs)
+                boardCopy, maxDepth=depth, timeLimitMs=thinkMs
+            )
 
             def applyAndContinue():
                 self._applyEngineResult(
-                    result.bestMove, result.nodes, result.bestScore, result.depth)
+                    result.bestMove, result.nodes, result.bestScore, result.depth
+                )
                 self.root.after(120, self._autoPlayStep)
+
             self.root.after(0, applyAndContinue)
         threading.Thread(target=worker, daemon=True).start()
 
@@ -732,6 +776,7 @@ class ChessGuiApp:
 
     def _modelMoveNow(self, continueAutoplay: bool = False):
         """Ask the model/engine to play a move, optionally continuing autoplay."""
+        print("modelMoveNow: thinking on thread", threading.get_ident())
         if self.board.is_game_over():
             return
         depth = int(self.searchDepthVar.get())
@@ -739,8 +784,10 @@ class ChessGuiApp:
         self.setStatus(f"model thinking (depth<= {depth}, {thinkMs}ms)...")
 
         def worker():
+            boardCopy = self.board.copy(stack=False)
             result = self.engine.searchIterativeDeepening(
-                self.board, maxDepth=depth, timeLimitMs=thinkMs)
+                boardCopy, maxDepth=depth, timeLimitMs=thinkMs
+            )
             bestMove = result.bestMove
             nodes = result.nodes
             bestScore = result.bestScore
@@ -791,7 +838,8 @@ class ChessGuiApp:
 
                 def applyModel():
                     self.model = model
-                    self.engine = AlphaBetaEngine(self.model)
+                    self.engine = AlphaBetaEngine(
+                        self.model, openingDbPath=r"D:\ChessEngine\opening_book.sqlite")
                     self.setStatus("training complete (model updated)")
                     self.updateEvalBarsAsync()
                 self.root.after(0, applyModel)
@@ -816,6 +864,7 @@ class ChessGuiApp:
             messagebox.showerror("Error", "No weights.json found yet.")
             return
         self.model = model
-        self.engine = AlphaBetaEngine(self.model)
+        self.engine = AlphaBetaEngine(
+            self.model, openingDbPath=r"D:\ChessEngine\opening_book.sqlite")
         self.setStatus("weights loaded (engine updated)")
         self.updateEvalBarsAsync()
