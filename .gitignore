@@ -5,3 +5,6 @@ stockfish-windows-x86-64-avx2/
 __pycache__/
 *.sqlite
 *.db
+eval_set.json
+opening_book.sqlite-shm
+opening_book.sqlite-wal

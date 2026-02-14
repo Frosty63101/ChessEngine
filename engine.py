@@ -193,7 +193,12 @@ class AlphaBetaEngine:
         return chess.polyglot.zobrist_hash(board)
 
     def evaluate(self, board: chess.Board) -> float:
-        return self.model.predict(board)
+        """
+        Return evaluation from WHITE POV (positive = good for White).
+
+        This assumes model.predict(board) is already White POV.
+        """
+        return float(self.model.predict(board))
 
     def terminalScore(self, board: chess.Board) -> float:
         if board.is_checkmate():
@@ -525,7 +530,6 @@ class AlphaBetaEngine:
             reverse=True
         )
 
-        # ✅ Critical fix: if there are no tactical moves, return the static eval
         if not noisyMoves:
             return standPat
 
@@ -756,7 +760,6 @@ class AlphaBetaEngine:
         return SearchResult(bestMove=bestMove, bestScore=bestScore, nodes=self.nodeCount, depth=depth, pvLine=pvLine)
 
     def searchIterativeDeepening(self, board: chess.Board, maxDepth: int, timeLimitMs: int) -> SearchResult:
-        self.resetSearchHeuristics()
         startTime = time.time()
         bestSoFar = SearchResult(
             bestMove=None, bestScore=0.0, nodes=0, depth=0, pvLine=[])
